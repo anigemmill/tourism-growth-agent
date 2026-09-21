@@ -1,0 +1,400 @@
+// Tourism Growth Intelligence — data model
+// Provider is SQLite for zero-config local dev (see ARCHITECTURE.md §2).
+// Enum-like fields are typed `String` (not Prisma `enum`) because SQLite has
+// no native enum support; valid values live in src/lib/enums.ts and are
+// validated at the application boundary (zod) rather than the DB layer.
+// Swapping to Postgres later only requires changing `provider`/`url` plus
+// re-adding native enums if desired — no relation changes needed.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & multi-tenancy
+// ---------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+
+  memberships BusinessMember[]
+  auditLogs   AuditLog[]
+}
+
+// Join table: which users can see which businesses, and with what role.
+// This is what makes the multi-business / agency portfolio view possible
+// without forking the codebase per business.
+model BusinessMember {
+  id         String   @id @default(cuid())
+  role       String // OWNER | ADMIN | STRATEGIST | MARKETER | VIEWER
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  @@unique([userId, businessId])
+}
+
+// ---------------------------------------------------------------------------
+// Business (tenant root) & derived intelligence profile
+// ---------------------------------------------------------------------------
+
+model Business {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Onboarding fields
+  name            String
+  website         String
+  destination     String
+  category        String // e.g. "Accommodation", "Tour Operator", "Attraction"
+  products        Json // string[]
+  services        Json // string[]
+  targetMarkets   Json // string[] e.g. ["Australia", "USA"]
+  targetAudiences Json // string[] e.g. ["Luxury couples", "Family adventure"]
+  bookingUrl      String?
+  socialProfiles  Json // { platform: url }
+  marketingChannels Json // string[]
+  goals           Json // string[]
+  keyMetrics      Json // { metric: value } freeform, user-declared
+
+  members        BusinessMember[]
+  profile        BusinessProfile?
+  competitors    Competitor[]
+  integrations   IntegrationConnection[]
+  signals        Signal[]
+  opportunities  Opportunity[]
+  contentBriefs  ContentBrief[]
+  productOpps    ProductOpportunity[]
+  experiments    Experiment[]
+  actionItems    ActionItem[]
+  dailyBriefs    DailyBrief[]
+  learnings      Learning[]
+  auditLogs      AuditLog[]
+}
+
+// The derived business intelligence profile. Built from onboarding input
+// plus (when connected) automated website analysis. Every LLM-derived field
+// is paired with a confidence + timestamp so the UI never presents an
+// inference as settled fact.
+model BusinessProfile {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String   @unique
+
+  positioning      String?
+  differentiators  Json? // string[]
+  pricingSummary   String?
+  experiences      Json? // [{ name, description, priceHint }]
+  seasonality      Json? // { month: demandLevel }
+  faqs             Json? // [{ question, answer }]
+  bookingProcess   String?
+  policies         Json? // string[]
+  currentContentSummary   String?
+  searchVisibilitySummary String?
+  aiVisibilitySummary     String?
+
+  analysisSource    String  @default("NOT_CONNECTED") // CONNECTED | REQUIRES_API
+  analysisConfidence Float? // 0-1
+  analyzedAt        DateTime?
+
+  updatedAt DateTime @updatedAt
+}
+
+model Competitor {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  name    String
+  website String
+  notes   String?
+
+  signals Signal[]
+
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Integrations
+// ---------------------------------------------------------------------------
+
+// Runtime status per (business, data source). This backs the Settings page
+// and every "CONNECTED / NOT CONNECTED" badge in the product — there is no
+// second place in the codebase that decides this.
+model IntegrationConnection {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  sourceKey String // matches src/lib/integrations/registry.ts id
+  status    String // CONNECTED | NOT_CONNECTED | REQUIRES_API | REQUIRES_USER_AUTH
+  config    Json? // non-secret config only (never store raw tokens here)
+  lastSyncedAt DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessId, sourceKey])
+}
+
+// ---------------------------------------------------------------------------
+// Signals — the atomic unit of intelligence, with mandatory evidence fields
+// ---------------------------------------------------------------------------
+
+model Signal {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  type String // TREND | DEMAND | COMPETITOR | AI_DISCOVERY | MARKET
+
+  title   String
+  summary String
+
+  // Evidence / epistemics — required on every signal (see ARCHITECTURE.md)
+  claimType  String // FACT | OBSERVATION | INFERENCE | HYPOTHESIS | RECOMMENDATION
+  source     String // human-readable source, e.g. "Demo seed data", "Google Search Console"
+  sourceTimestamp DateTime
+  evidence   String
+  confidence Float // 0-1
+
+  // Trend evaluation (spec: relevance, audience, scale, momentum, commercial potential, confidence)
+  relevance           String? // LOW | MEDIUM | HIGH
+  targetAudience      String?
+  scale               String? // LOW | MEDIUM | HIGH
+  momentum            String? // DECLINING | STABLE | RISING | SURGING
+  commercialPotential String? // LOW | MEDIUM | HIGH
+
+  competitor   Competitor? @relation(fields: [competitorId], references: [id])
+  competitorId String?
+
+  opportunities OpportunitySignal[]
+
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Opportunity Engine outputs
+// ---------------------------------------------------------------------------
+
+model Opportunity {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  title    String
+  category String // MARKETING | PRODUCT | MARKET | CONVERSION | RETENTION
+  summary  String
+  recommendedAction String
+
+  // Explainable rubric — see src/lib/opportunity-engine/score.ts
+  impactScore        Int // 0-100
+  evidenceScore      Int
+  relevanceScore     Int
+  urgencyScore       Int
+  effortScore        Int // higher = less effort
+  costScore          Int // higher = lower cost
+  competitiveScore   Int
+  strategicScore     Int
+  totalScore         Int
+  scoreExplanation   String // human-readable "why this ranked here"
+
+  status String @default("IDENTIFIED") // IDENTIFIED | PLANNED | IN_PROGRESS | SHIPPED | MEASURED | DISCARDED
+
+  signals OpportunitySignal[]
+  actionItems ActionItem[]
+  experiments Experiment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Many-to-many: an opportunity is supported by one or more signals (evidence trail).
+model OpportunitySignal {
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  opportunityId String
+  signal        Signal      @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  signalId      String
+
+  @@id([opportunityId, signalId])
+}
+
+model ContentBrief {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  contentType String // LANDING_PAGE | BLOG | DESTINATION_GUIDE | FAQ | SOCIAL_POST | VIDEO | EMAIL | PR | COMPARISON | ITINERARY
+  title       String
+  whyNow      String // traveller demand / commercial intent / SEO / AI discovery / competitive weakness / seasonal relevance
+  targetAudience String
+  keyPoints   Json // string[]
+  seoNotes    String?
+  aiDiscoveryNotes String?
+  status      String @default("PROPOSED") // PROPOSED | APPROVED | IN_PROGRESS | PUBLISHED | REJECTED
+
+  createdAt DateTime @default(now())
+}
+
+model ProductOpportunity {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  targetTraveller   String
+  problem           String
+  demandEvidence    String
+  existingSupply    String
+  gap               String
+  proposedProduct   String
+  potentialPartners Json? // string[]
+  seasonality       String?
+  risks             Json? // string[]
+  dataNeeded        Json? // string[] — what's missing before this can be called viable
+  confidence        Float // 0-1; must stay honest when dataNeeded is non-empty
+
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Experiments
+// ---------------------------------------------------------------------------
+
+model Experiment {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  opportunityId String?
+
+  hypothesis    String
+  audience      String
+  action        String
+  channel       String
+  timeframeStart DateTime
+  timeframeEnd   DateTime
+  successMetric  String
+  baseline       String
+
+  result   String?
+  learning String?
+  nextAction String?
+
+  status String @default("PLANNED") // PLANNED | RUNNING | COMPLETE | ABANDONED
+
+  supersedesExperimentId String?
+  supersedesExperiment   Experiment? @relation("ExperimentHistory", fields: [supersedesExperimentId], references: [id])
+  supersededBy           Experiment[] @relation("ExperimentHistory")
+  whyDifferent            String? // required narrative if this retries a failed experiment
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Weekly plan / actions
+// ---------------------------------------------------------------------------
+
+model ActionItem {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+  opportunityId String?
+
+  action          String
+  why             String
+  audience        String
+  channel         String
+  owner           String // e.g. "AI" or a person's name/role
+  effort          String // LOW | MEDIUM | HIGH
+  expectedOutcome String
+  measurement     String
+  status          String @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | DONE | BLOCKED
+
+  executionMode    String @default("NEEDS_HUMAN") // AI_CAN_EXECUTE | NEEDS_HUMAN
+  requiresApproval Boolean @default(true)
+
+  weekOf DateTime // Monday of the target week
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Daily brief snapshots (persisted, not regenerated retroactively)
+// ---------------------------------------------------------------------------
+
+model DailyBrief {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  date DateTime // day this brief is for
+
+  whatChanged      Json // [{ text, signalId? }]
+  whyItMatters     String
+  biggestOpportunityId String?
+  whatToDo         Json // string[]
+  aiCanExecute     Json // string[]
+  needsHuman       Json // string[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([businessId, date])
+}
+
+// ---------------------------------------------------------------------------
+// Learning engine
+// ---------------------------------------------------------------------------
+
+model Learning {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  relatedType String // EXPERIMENT | ACTION | OPPORTUNITY
+  relatedId   String
+
+  observation String
+  implication String // how this should change future recommendations
+
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Audit log — every AI-proposed or AI-executed change
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  businessId String
+
+  actor       String // "AI" or userId
+  user        User?   @relation(fields: [userId], references: [id])
+  userId      String?
+
+  action      String // human-readable description
+  entityType  String?
+  entityId    String?
+
+  requiresApproval Boolean @default(false)
+  approved         Boolean @default(false)
+  approvedAt       DateTime?
+
+  createdAt DateTime @default(now())
+}
