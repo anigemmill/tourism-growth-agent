@@ -1,10 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/intelligence/stat-tile";
 import { ProductOpportunityCard } from "@/components/intelligence/product-opportunity-card";
+import { ProductOpportunityForm } from "@/components/intelligence/product-opportunity-form";
 import { Card, CardContent } from "@/components/ui/card";
+import { requireMembership, roleAtLeast } from "@/lib/auth";
 
 export default async function ProductPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
+  const { membership } = await requireMembership(businessId);
   const products = await prisma.productOpportunity.findMany({ where: { businessId }, orderBy: { createdAt: "desc" } });
 
   return (
@@ -13,6 +16,13 @@ export default async function ProductPage({ params }: { params: Promise<{ busine
         title="Product Opportunities"
         description="Evidence-based new product, package, and partnership ideas. Confidence and outstanding data needs are always shown — nothing is claimed as commercially viable without sufficient evidence."
       />
+
+      {roleAtLeast(membership.role, "STRATEGIST") && (
+        <div className="mb-6">
+          <ProductOpportunityForm businessId={businessId} />
+        </div>
+      )}
+
       {products.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-sm text-foreground-muted">No product opportunities yet.</CardContent>

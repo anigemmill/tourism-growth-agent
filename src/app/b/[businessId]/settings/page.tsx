@@ -7,7 +7,9 @@ import { getIntegrationStatuses, type IntegrationDomain } from "@/lib/integratio
 import { formatDateTime, formatPercent } from "@/lib/utils";
 import { requireMembership, roleAtLeast } from "@/lib/auth";
 import { ROLES } from "@/lib/enums";
-import { updateMemberRole } from "./actions";
+import { Field } from "@/components/ui/field";
+import { SubmitForm } from "@/components/ui/submit-form";
+import { updateMemberRole, addCompetitor, removeCompetitor, updateBusinessProfile } from "./actions";
 
 const DOMAIN_LABEL: Record<IntegrationDomain, string> = {
   SEARCH: "Search",
@@ -26,12 +28,14 @@ function asList(v: unknown): string[] {
 export default async function SettingsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
   const { membership } = await requireMembership(businessId);
-  const [business, profile, members] = await Promise.all([
+  const [business, profile, members, competitors] = await Promise.all([
     prisma.business.findUniqueOrThrow({ where: { id: businessId } }),
     prisma.businessProfile.findUnique({ where: { businessId } }),
     prisma.businessMember.findMany({ where: { businessId }, include: { user: true }, orderBy: { createdAt: "asc" } }),
+    prisma.competitor.findMany({ where: { businessId }, orderBy: { name: "asc" } }),
   ]);
   const canManageMembers = roleAtLeast(membership.role, "ADMIN");
+  const canManageBusiness = roleAtLeast(membership.role, "ADMIN");
 
   const integrations = getIntegrationStatuses();
   const grouped = integrations.reduce<Record<string, typeof integrations>>((acc, i) => {
@@ -69,14 +73,55 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
               <span className="text-foreground-subtle">Products: </span>
               {asList(business.products).join(", ") || "—"}
             </div>
-            <div>
-              <span className="text-foreground-subtle">Target audiences: </span>
-              {asList(business.targetAudiences).join(", ") || "—"}
-            </div>
-            <div>
-              <span className="text-foreground-subtle">Goals: </span>
-              {asList(business.goals).join(", ") || "—"}
-            </div>
+
+            {canManageBusiness ? (
+              <SubmitForm
+                action={updateBusinessProfile}
+                hidden={{ businessId }}
+                submitLabel="Save changes"
+                className="mt-2 border-t border-border pt-3"
+              >
+                <Field
+                  label="Target markets"
+                  name="targetMarkets"
+                  textarea
+                  rows={2}
+                  hint="One per line"
+                  defaultValue={asList(business.targetMarkets).join("\n")}
+                />
+                <Field
+                  label="Target audiences"
+                  name="targetAudiences"
+                  textarea
+                  rows={2}
+                  hint="One per line"
+                  defaultValue={asList(business.targetAudiences).join("\n")}
+                />
+                <Field
+                  label="Goals"
+                  name="goals"
+                  textarea
+                  rows={2}
+                  hint="One per line"
+                  defaultValue={asList(business.goals).join("\n")}
+                />
+              </SubmitForm>
+            ) : (
+              <>
+                <div>
+                  <span className="text-foreground-subtle">Target markets: </span>
+                  {asList(business.targetMarkets).join(", ") || "—"}
+                </div>
+                <div>
+                  <span className="text-foreground-subtle">Target audiences: </span>
+                  {asList(business.targetAudiences).join(", ") || "—"}
+                </div>
+                <div>
+                  <span className="text-foreground-subtle">Goals: </span>
+                  {asList(business.goals).join(", ") || "—"}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -118,7 +163,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
                 <div className="text-xs text-foreground-subtle">{m.user.email}</div>
               </div>
               {canManageMembers ? (
-                <form action={updateMemberRole.bind(null, businessId, m.id)} className="flex items-center gap-2">
+                <SubmitForm
+                  action={updateMemberRole}
+                  hidden={{ businessId, memberId: m.id }}
+                  submitLabel="Update"
+                  className="flex-row items-center gap-2 flex-wrap"
+                >
                   <select
                     name="newRole"
                     defaultValue={m.role}
@@ -130,15 +180,48 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
                       </option>
                     ))}
                   </select>
-                  <button type="submit" className="text-xs text-brand hover:underline">
-                    Update
-                  </button>
-                </form>
+                </SubmitForm>
               ) : (
                 <Badge tone="neutral">{m.role}</Badge>
               )}
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Competitors</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {competitors.map((c) => (
+            <div key={c.id} className="flex items-center justify-between gap-3 text-sm border-b border-border pb-3 last:border-0 last:pb-0">
+              <div>
+                <div className="font-medium">{c.name}</div>
+                <div className="text-xs text-foreground-subtle">{c.website}</div>
+              </div>
+              {canManageBusiness && (
+                <form action={removeCompetitor.bind(null, businessId, c.id)}>
+                  <button type="submit" className="text-xs text-danger hover:underline">
+                    Remove
+                  </button>
+                </form>
+              )}
+            </div>
+          ))}
+          {competitors.length === 0 && <p className="text-sm text-foreground-muted">No competitors defined yet.</p>}
+
+          {canManageBusiness && (
+            <SubmitForm
+              action={addCompetitor}
+              hidden={{ businessId }}
+              submitLabel="Add"
+              className="flex-row items-end gap-2 border-t border-border pt-3 mt-1"
+            >
+              <Field label="Name" name="name" required className="flex-1" />
+              <Field label="Website" name="website" placeholder="example.com" className="flex-1" />
+            </SubmitForm>
+          )}
         </CardContent>
       </Card>
 

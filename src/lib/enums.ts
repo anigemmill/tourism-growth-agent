@@ -52,6 +52,9 @@ export const CONTENT_TYPES = [
 ] as const;
 export type ContentType = (typeof CONTENT_TYPES)[number];
 
+export const CONTENT_BRIEF_STATUSES = ["PROPOSED", "APPROVED", "IN_PROGRESS", "PUBLISHED", "REJECTED"] as const;
+export type ContentBriefStatus = (typeof CONTENT_BRIEF_STATUSES)[number];
+
 export const EXPERIMENT_STATUSES = ["PLANNED", "RUNNING", "COMPLETE", "ABANDONED"] as const;
 export type ExperimentStatus = (typeof EXPERIMENT_STATUSES)[number];
 
@@ -67,6 +70,20 @@ export const CLAIM_TYPE_LABEL: Record<ClaimType, string> = {
   INFERENCE: "Inference",
   HYPOTHESIS: "Hypothesis",
   RECOMMENDATION: "Recommendation",
+};
+
+export const RUBRIC_LABEL_HINT: Record<
+  "impactScore" | "evidenceScore" | "relevanceScore" | "urgencyScore" | "effortScore" | "costScore" | "competitiveScore" | "strategicScore",
+  string
+> = {
+  impactScore: "Potential commercial impact if pursued",
+  evidenceScore: "Strength of the supporting evidence",
+  relevanceScore: "Fit with this business's audiences/products",
+  urgencyScore: "How time-sensitive this is",
+  effortScore: "Higher = less effort required",
+  costScore: "Higher = lower cost required",
+  competitiveScore: "How much competitive pressure makes this matter",
+  strategicScore: "Alignment with stated business goals",
 };
 
 export const INTEGRATION_STATUS_LABEL: Record<IntegrationStatus, string> = {

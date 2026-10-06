@@ -1,11 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/intelligence/stat-tile";
 import { SignalCard } from "@/components/intelligence/signal-card";
+import { SignalForm } from "@/components/intelligence/signal-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { requireMembership, roleAtLeast } from "@/lib/auth";
 
 export default async function CompetitorsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
+  const { membership } = await requireMembership(businessId);
   const [competitors, signals] = await Promise.all([
     prisma.competitor.findMany({ where: { businessId }, orderBy: { name: "asc" } }),
     prisma.signal.findMany({
@@ -32,6 +35,17 @@ export default async function CompetitorsPage({ params }: { params: Promise<{ bu
           <span className="text-sm text-foreground-muted">No competitors defined yet — add them in Settings.</span>
         )}
       </div>
+
+      {roleAtLeast(membership.role, "MARKETER") && (
+        <div className="mb-6">
+          <SignalForm
+            businessId={businessId}
+            redirectPath={`/b/${businessId}/competitors`}
+            defaultType="COMPETITOR"
+            competitors={competitors}
+          />
+        </div>
+      )}
 
       {signals.length === 0 ? (
         <Card>

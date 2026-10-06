@@ -3,50 +3,7 @@ import { createBusiness } from "./actions";
 import { isAnthropicConfigured } from "@/lib/integrations/registry";
 import { Badge } from "@/components/ui/badge";
 import { requireUser } from "@/lib/auth";
-
-function Field({
-  label,
-  name,
-  placeholder,
-  required,
-  textarea,
-  hint,
-  type = "text",
-}: {
-  label: string;
-  name: string;
-  placeholder?: string;
-  required?: boolean;
-  textarea?: boolean;
-  hint?: string;
-  type?: string;
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium">
-        {label} {required && <span className="text-danger">*</span>}
-      </span>
-      {hint && <span className="text-xs text-foreground-subtle -mt-1">{hint}</span>}
-      {textarea ? (
-        <textarea
-          name={name}
-          placeholder={placeholder}
-          required={required}
-          rows={3}
-          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
-        />
-      ) : (
-        <input
-          type={type}
-          name={name}
-          placeholder={placeholder}
-          required={required}
-          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand"
-        />
-      )}
-    </label>
-  );
-}
+import { Field } from "@/components/ui/field";
 
 export default async function OnboardingPage() {
   await requireUser("/onboarding");

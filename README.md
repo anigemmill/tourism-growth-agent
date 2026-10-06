@@ -43,6 +43,19 @@ a Marketer-started, AI-executable action is marked done (requires
 Strategist+). A Viewer sees the same evidence everyone else does but no
 mutation buttons.
 
+## Creating intelligence manually
+
+Every signal, opportunity, experiment, content brief, product opportunity,
+and action item has an in-dashboard creation form (role-gated, same roles as
+above) — this is how the product stays usable before any live integration
+is connected. Each form posts through `src/components/ui/submit-form.tsx`,
+which returns `{ error }` from the server action instead of throwing, so a
+validation failure (missing field, duplicate-hypothesis guard, "needs at
+least one Owner") shows inline on the form rather than crashing to a
+generic error page — Next.js redacts thrown Server Action error text on the
+client by design, so expected validation failures must be returned, not
+thrown.
+
 ## Environment variables
 
 | Variable | Required for |

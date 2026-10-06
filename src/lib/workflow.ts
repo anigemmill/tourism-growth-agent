@@ -1,4 +1,4 @@
-import type { ActionStatus, ExperimentStatus, OpportunityStatus, Role } from "@/lib/enums";
+import type { ActionStatus, ContentBriefStatus, ExperimentStatus, OpportunityStatus, Role } from "@/lib/enums";
 
 export interface Transition<S extends string> {
   next: S;
@@ -52,6 +52,17 @@ export const EXPERIMENT_TRANSITIONS: Record<ExperimentStatus, Transition<Experim
   ],
   COMPLETE: [],
   ABANDONED: [],
+};
+
+export const CONTENT_BRIEF_TRANSITIONS: Record<ContentBriefStatus, Transition<ContentBriefStatus>[]> = {
+  PROPOSED: [
+    { next: "APPROVED", label: "Approve", minRole: "STRATEGIST" },
+    { next: "REJECTED", label: "Reject", minRole: "STRATEGIST" },
+  ],
+  APPROVED: [{ next: "IN_PROGRESS", label: "Start drafting", minRole: "MARKETER" }],
+  IN_PROGRESS: [{ next: "PUBLISHED", label: "Mark published", minRole: "STRATEGIST" }],
+  PUBLISHED: [],
+  REJECTED: [],
 };
 
 /**

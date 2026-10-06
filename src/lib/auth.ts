@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ROLES, type Role } from "@/lib/enums";
-import type { User, BusinessMember } from "@prisma/client";
+import { Prisma, type User, type BusinessMember } from "@prisma/client";
 
 export const SESSION_COOKIE = "tgi_uid";
 
@@ -56,7 +56,18 @@ export async function getOrCreateMembership(userId: string, businessId: string):
 
   const memberCount = await prisma.businessMember.count({ where: { businessId } });
   const role: Role = memberCount === 0 ? "OWNER" : "VIEWER";
-  return prisma.businessMember.create({ data: { userId, businessId, role } });
+  try {
+    return await prisma.businessMember.create({ data: { userId, businessId, role } });
+  } catch (err) {
+    // The layout and the page it renders both call this for the same
+    // request, and React can render them concurrently — a second call can
+    // lose the create race after the first already won it. Treat "someone
+    // else just created this" as success rather than a crash.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return prisma.businessMember.findUniqueOrThrow({ where: { userId_businessId: { userId, businessId } } });
+    }
+    throw err;
+  }
 }
 
 export async function requireMembership(businessId: string): Promise<{ user: User; membership: BusinessMember }> {

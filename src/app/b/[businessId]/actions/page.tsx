@@ -1,14 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/intelligence/stat-tile";
 import { ActionItemRow } from "@/components/intelligence/action-item-row";
+import { ActionItemForm } from "@/components/intelligence/action-item-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
-import { requireMembership } from "@/lib/auth";
+import { requireMembership, roleAtLeast } from "@/lib/auth";
 
 export default async function ActionsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
   const { membership } = await requireMembership(businessId);
-  const actions = await prisma.actionItem.findMany({ where: { businessId }, orderBy: [{ weekOf: "desc" }, { createdAt: "asc" }] });
+  const [actions, opportunities] = await Promise.all([
+    prisma.actionItem.findMany({ where: { businessId }, orderBy: [{ weekOf: "desc" }, { createdAt: "asc" }] }),
+    prisma.opportunity.findMany({ where: { businessId, status: { not: "DISCARDED" } }, orderBy: { totalScore: "desc" } }),
+  ]);
 
   const grouped = new Map<string, typeof actions>();
   for (const a of actions) {
@@ -22,6 +26,13 @@ export default async function ActionsPage({ params }: { params: Promise<{ busine
         title="Actions"
         description="The weekly growth plan — every action states why, for whom, on which channel, who owns it, effort, expected outcome, and how it's measured."
       />
+
+      {roleAtLeast(membership.role, "MARKETER") && (
+        <div className="mb-6">
+          <ActionItemForm businessId={businessId} opportunities={opportunities} />
+        </div>
+      )}
+
       {grouped.size === 0 ? (
         <Card>
           <CardContent className="py-8 text-sm text-foreground-muted">No actions planned yet.</CardContent>

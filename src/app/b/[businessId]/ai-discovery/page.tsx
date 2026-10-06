@@ -1,13 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/intelligence/stat-tile";
 import { SignalCard } from "@/components/intelligence/signal-card";
+import { SignalForm } from "@/components/intelligence/signal-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { isAnthropicConfigured } from "@/lib/integrations/registry";
+import { requireMembership, roleAtLeast } from "@/lib/auth";
 import { runDiscoveryProbe } from "./actions";
 
 export default async function AIDiscoveryPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
+  const { membership } = await requireMembership(businessId);
   const [signals, business] = await Promise.all([
     prisma.signal.findMany({ where: { businessId, type: "AI_DISCOVERY" }, orderBy: { createdAt: "desc" } }),
     prisma.business.findUniqueOrThrow({ where: { id: businessId } }),
@@ -67,6 +70,12 @@ export default async function AIDiscoveryPage({ params }: { params: Promise<{ bu
           )}
         </CardContent>
       </Card>
+
+      {roleAtLeast(membership.role, "MARKETER") && (
+        <div className="mb-6">
+          <SignalForm businessId={businessId} redirectPath={`/b/${businessId}/ai-discovery`} defaultType="AI_DISCOVERY" />
+        </div>
+      )}
 
       {signals.length === 0 ? (
         <Card>
