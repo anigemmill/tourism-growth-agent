@@ -2,6 +2,7 @@ import { Compass } from "lucide-react";
 import { createBusiness } from "./actions";
 import { isAnthropicConfigured } from "@/lib/integrations/registry";
 import { Badge } from "@/components/ui/badge";
+import { requireUser } from "@/lib/auth";
 
 function Field({
   label,
@@ -47,7 +48,8 @@ function Field({
   );
 }
 
-export default function OnboardingPage() {
+export default async function OnboardingPage() {
+  await requireUser("/onboarding");
   const aiEnabled = isAnthropicConfigured();
 
   return (

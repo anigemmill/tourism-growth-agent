@@ -8,6 +8,7 @@ import { EvidenceMeta } from "@/components/intelligence/evidence-meta";
 import { OpportunityCard } from "@/components/intelligence/opportunity-card";
 import { formatDate } from "@/lib/utils";
 import { Bot, User, AlertTriangle } from "lucide-react";
+import { requireMembership } from "@/lib/auth";
 
 export default async function ExecutiveOverviewPage({
   params,
@@ -15,6 +16,7 @@ export default async function ExecutiveOverviewPage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
+  const { membership } = await requireMembership(businessId);
 
   const [brief, opportunityCount, experimentCount, actionCount, integrationConnected, integrationTotal] =
     await Promise.all([
@@ -95,7 +97,7 @@ export default async function ExecutiveOverviewPage({
       <div className="mt-6">
         <h2 className="text-sm font-semibold mb-3">3. Biggest opportunity</h2>
         {topOpportunity ? (
-          <OpportunityCard opportunity={topOpportunity} />
+          <OpportunityCard opportunity={topOpportunity} role={membership.role} showBreakdown={false} />
         ) : (
           <Card>
             <CardContent className="py-6 text-sm text-foreground-muted">

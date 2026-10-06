@@ -3,9 +3,11 @@ import { PageHeader } from "@/components/intelligence/stat-tile";
 import { ActionItemRow } from "@/components/intelligence/action-item-row";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
+import { requireMembership } from "@/lib/auth";
 
 export default async function ActionsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
+  const { membership } = await requireMembership(businessId);
   const actions = await prisma.actionItem.findMany({ where: { businessId }, orderBy: [{ weekOf: "desc" }, { createdAt: "asc" }] });
 
   const grouped = new Map<string, typeof actions>();
@@ -33,7 +35,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ busine
               </CardHeader>
               <CardContent>
                 {items.map((a) => (
-                  <ActionItemRow key={a.id} action={a} />
+                  <ActionItemRow key={a.id} action={a} role={membership.role} />
                 ))}
               </CardContent>
             </Card>

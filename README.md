@@ -23,8 +23,25 @@ npm run db:seed             # loads one fully-populated demo business
 npm run dev
 ```
 
-Open http://localhost:3000 — it redirects to the demo business's Executive
+Open http://localhost:3000 — sign in with any email (no password; see
+**Authentication** below), and you'll land on the demo business's Executive
 Overview. Use **Add business** in the top bar to onboard a real one.
+
+## Authentication & roles
+
+There's no external identity provider wired up (no OAuth credentials exist
+in this environment) — signing in just takes an email and upserts a `User`
+row, then sets a session cookie. The first person to open a given business
+becomes its **Owner**; everyone else who opens it joins as a **Viewer**.
+Owners/Admins can promote or demote teammates from **Settings → Team &
+roles**.
+
+Every opportunity, action, and experiment status change is gated by role
+(`VIEWER < MARKETER < STRATEGIST < ADMIN < OWNER`, see `src/lib/workflow.ts`)
+and recorded to an `AuditLog` row — including a stricter approval gate when
+a Marketer-started, AI-executable action is marked done (requires
+Strategist+). A Viewer sees the same evidence everyone else does but no
+mutation buttons.
 
 ## Environment variables
 

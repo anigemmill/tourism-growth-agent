@@ -2,9 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/intelligence/stat-tile";
 import { ExperimentCard } from "@/components/intelligence/experiment-card";
 import { Card, CardContent } from "@/components/ui/card";
+import { requireMembership } from "@/lib/auth";
 
 export default async function ExperimentsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
+  const { membership } = await requireMembership(businessId);
   const experiments = await prisma.experiment.findMany({ where: { businessId }, orderBy: { createdAt: "desc" } });
 
   return (
@@ -20,7 +22,7 @@ export default async function ExperimentsPage({ params }: { params: Promise<{ bu
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {experiments.map((e) => (
-            <ExperimentCard key={e.id} experiment={e} />
+            <ExperimentCard key={e.id} experiment={e} role={membership.role} />
           ))}
         </div>
       )}

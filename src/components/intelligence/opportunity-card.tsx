@@ -1,9 +1,14 @@
 import type { Opportunity, Signal } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EvidenceMeta } from "@/components/intelligence/evidence-meta";
 import { ScoreBreakdown } from "@/components/intelligence/score-breakdown";
 import { explainScore } from "@/lib/opportunity-engine/score";
+import { OPPORTUNITY_TRANSITIONS } from "@/lib/workflow";
+import { roleAtLeast } from "@/lib/auth";
+import type { OpportunityStatus } from "@/lib/enums";
+import { transitionOpportunity } from "@/app/b/[businessId]/opportunities/actions";
 
 type OpportunityWithSignals = Opportunity & { signals: { signal: Signal }[] };
 
@@ -18,11 +23,16 @@ const CATEGORY_TONE = {
 export function OpportunityCard({
   opportunity,
   showBreakdown = true,
+  role,
 }: {
   opportunity: OpportunityWithSignals;
   showBreakdown?: boolean;
+  /** Current user's role on this business — omit to render read-only. */
+  role?: string;
 }) {
   const explanation = explainScore(opportunity);
+  const transitions = OPPORTUNITY_TRANSITIONS[opportunity.status as OpportunityStatus];
+  const availableTransitions = role ? transitions.filter((t) => roleAtLeast(role, t.minRole)) : [];
 
   return (
     <Card>
@@ -64,6 +74,24 @@ export function OpportunityCard({
                 evidence={signal.evidence}
               />
             ))}
+          </div>
+        )}
+
+        {role && transitions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+            {availableTransitions.length > 0 ? (
+              availableTransitions.map((t) => (
+                <form key={t.next} action={transitionOpportunity.bind(null, opportunity.businessId, opportunity.id, t.next)}>
+                  <Button type="submit" size="sm" variant={t.next === "DISCARDED" ? "outline" : "primary"}>
+                    {t.label}
+                  </Button>
+                </form>
+              ))
+            ) : (
+              <span className="text-xs text-foreground-subtle">
+                Requires {transitions[0].minRole}+ role to move this forward.
+              </span>
+            )}
           </div>
         )}
       </CardContent>

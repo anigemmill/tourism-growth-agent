@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { analyzeBusinessWebsite } from "@/lib/ai/website-analysis";
 import { INTEGRATION_REGISTRY, resolveStatus } from "@/lib/integrations/registry";
+import { requireUser } from "@/lib/auth";
 
 function splitLines(value: FormDataEntryValue | null): string[] {
   if (!value || typeof value !== "string") return [];
@@ -14,6 +15,8 @@ function splitLines(value: FormDataEntryValue | null): string[] {
 }
 
 export async function createBusiness(formData: FormData) {
+  const user = await requireUser("/onboarding");
+
   const name = String(formData.get("name") ?? "").trim();
   const website = String(formData.get("website") ?? "").trim();
   const destination = String(formData.get("destination") ?? "").trim();
@@ -48,6 +51,10 @@ export async function createBusiness(formData: FormData) {
       goals,
       keyMetrics: {},
     },
+  });
+
+  await prisma.businessMember.create({
+    data: { userId: user.id, businessId: business.id, role: "OWNER" },
   });
 
   if (competitors.length > 0) {

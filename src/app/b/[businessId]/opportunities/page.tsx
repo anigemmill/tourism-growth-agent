@@ -2,9 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/intelligence/stat-tile";
 import { OpportunityCard } from "@/components/intelligence/opportunity-card";
 import { Card, CardContent } from "@/components/ui/card";
+import { requireMembership } from "@/lib/auth";
 
 export default async function OpportunitiesPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
+  const { membership } = await requireMembership(businessId);
   const opportunities = await prisma.opportunity.findMany({
     where: { businessId, status: { not: "DISCARDED" } },
     include: { signals: { include: { signal: true } } },
@@ -26,7 +28,7 @@ export default async function OpportunitiesPage({ params }: { params: Promise<{ 
       ) : (
         <div className="flex flex-col gap-4">
           {opportunities.map((o) => (
-            <OpportunityCard key={o.id} opportunity={o} />
+            <OpportunityCard key={o.id} opportunity={o} role={membership.role} />
           ))}
         </div>
       )}

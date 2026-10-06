@@ -181,14 +181,29 @@ Any action that publishes, spends money, or materially changes the business
 requires `requiresApproval = true` by default and is blocked until a user
 with `Strategist+` role approves it (`AuditLog` records the approval).
 
+This is implemented, not just modeled: `src/lib/auth.ts` provides a
+cookie-based session (no external OAuth provider exists in this
+environment — see §9/§10) and auto-membership (business's first visitor
+becomes Owner, later visitors join as Viewer). `src/lib/workflow.ts` defines
+the Opportunity/ActionItem/Experiment state machines with a `minRole` per
+transition, enforced identically by the UI (which buttons render) and the
+server actions (which transitions are accepted) — see
+`src/app/b/[businessId]/*/actions.ts`. Every transition writes an
+`AuditLog` row; an AI-executed action that `requiresApproval` needs
+Strategist+ specifically to mark it done, not just any role that can start
+or block it.
+
 ## 7. MVP
 
 Built in this session:
 
 - Multi-business schema + seed data for one fully-populated demo business.
+- Cookie-based sign-in, auto-membership, and role-gated status transitions
+  (Opportunities, Action items, Experiments) with audit logging.
 - Onboarding form that creates a Business and (if `ANTHROPIC_API_KEY` is set)
   runs website analysis to populate `BusinessProfile`.
-- Integration registry + Settings page showing real status per source.
+- Integration registry + Settings page showing real status per source, plus
+  a team/roles manager.
 - Opportunity Engine (deterministic rubric) operating over seeded Signals.
 - Dashboard: Executive Overview, Today's Intelligence, Growth Opportunities,
   Traveller Demand, Competitors, AI Discovery, Marketing, Product

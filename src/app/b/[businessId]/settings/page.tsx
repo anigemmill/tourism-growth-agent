@@ -5,6 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { IntegrationStatusBadge } from "@/components/intelligence/integration-status-badge";
 import { getIntegrationStatuses, type IntegrationDomain } from "@/lib/integrations/registry";
 import { formatDateTime, formatPercent } from "@/lib/utils";
+import { requireMembership, roleAtLeast } from "@/lib/auth";
+import { ROLES } from "@/lib/enums";
+import { updateMemberRole } from "./actions";
 
 const DOMAIN_LABEL: Record<IntegrationDomain, string> = {
   SEARCH: "Search",
@@ -22,10 +25,13 @@ function asList(v: unknown): string[] {
 
 export default async function SettingsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
-  const [business, profile] = await Promise.all([
+  const { membership } = await requireMembership(businessId);
+  const [business, profile, members] = await Promise.all([
     prisma.business.findUniqueOrThrow({ where: { id: businessId } }),
     prisma.businessProfile.findUnique({ where: { businessId } }),
+    prisma.businessMember.findMany({ where: { businessId }, include: { user: true }, orderBy: { createdAt: "asc" } }),
   ]);
+  const canManageMembers = roleAtLeast(membership.role, "ADMIN");
 
   const integrations = getIntegrationStatuses();
   const grouped = integrations.reduce<Record<string, typeof integrations>>((acc, i) => {
@@ -99,6 +105,42 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Team &amp; roles</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {members.map((m) => (
+            <div key={m.id} className="flex items-center justify-between gap-3 text-sm border-b border-border pb-3 last:border-0 last:pb-0">
+              <div>
+                <div className="font-medium">{m.user.name || m.user.email}</div>
+                <div className="text-xs text-foreground-subtle">{m.user.email}</div>
+              </div>
+              {canManageMembers ? (
+                <form action={updateMemberRole.bind(null, businessId, m.id)} className="flex items-center gap-2">
+                  <select
+                    name="newRole"
+                    defaultValue={m.role}
+                    className="rounded-lg border border-border bg-surface px-2 py-1 text-xs outline-none focus:border-brand"
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit" className="text-xs text-brand hover:underline">
+                    Update
+                  </button>
+                </form>
+              ) : (
+                <Badge tone="neutral">{m.role}</Badge>
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <h2 className="text-sm font-semibold mb-3">Integrations</h2>
       <div className="flex flex-col gap-6">
